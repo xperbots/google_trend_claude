@@ -48,9 +48,9 @@ async def get_trending_topics(geo: str, time_window: str = "past_24_hours", limi
     params = FetchParams(
         geo=geo,
         time_window=time_window_enum,
-        category=Category.ALL,
+        category=Category.GAMES,
         active_only=False,
-        sort=SortBy.RELEVANCE,
+        sort=SortBy.SEARCH_VOLUME,
         limit=limit,
         expand_breakdown=False,
         export_mode=ExportMode.SCRAPE,
@@ -65,9 +65,9 @@ async def get_trending_topics(geo: str, time_window: str = "past_24_hours", limi
 
 
 def main(
-    geo: str = typer.Argument("Japan", help="Country/region for trending topics"),
+    geo: str = typer.Argument("Vietnam", help="Country/region for trending topics"),
     time_window: str = typer.Option(
-        "past_24_hours", 
+        "past_48_hours", 
         "--time",
         help="Time window: past_4_hours, past_24_hours, past_48_hours, past_7_days"
     ),
@@ -79,14 +79,17 @@ def main(
     
     Examples:
     
+      # Default: Vietnam game trends from past 48 hours
+      python3 simple_trends.py
+      
       # Japanese trends
-      python simple_trends.py Japan
+      python3 simple_trends.py Japan
       
       # Korean trends from past week
-      python simple_trends.py "South Korea" --time=past_7_days
+      python3 simple_trends.py "South Korea" --time=past_7_days
       
       # US trends, limit to 10
-      python simple_trends.py "United States" --limit=10
+      python3 simple_trends.py "United States" --limit=10
     """
     
     if not verbose:

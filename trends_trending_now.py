@@ -39,17 +39,17 @@ app = typer.Typer(
 @app.command()
 def main(
     geo: str = typer.Option(
-        "United States",
+        "Vietnam",
         "--geo",
         help="Geographic location (country/region name or code)"
     ),
     time_window: str = typer.Option(
-        "past_24_hours",
+        "past_48_hours",
         "--time-window",
         help="Time window: past_4_hours, past_24_hours, past_48_hours, past_7_days"
     ),
     category: str = typer.Option(
-        "all",
+        "games",
         "--category", 
         help="Category: all, sports, entertainment, etc."
     ),
@@ -59,7 +59,7 @@ def main(
         help="Show only active trends (exclude 'Lasted' trends)"
     ),
     sort: str = typer.Option(
-        "relevance",
+        "search_volume",
         "--sort",
         help="Sort: title, search_volume, recency, relevance"
     ),

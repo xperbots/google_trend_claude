@@ -41,8 +41,8 @@ python test_basic.py
 ### Basic Usage
 
 ```bash
-# Default: US, past 24 hours, all categories, by relevance
-python trends_trending_now.py
+# Default: Vietnam, past 48 hours, games category, by search volume
+python3 trends_trending_now.py
 
 # UK, past 7 days, limit to 50 results
 python trends_trending_now.py --geo="United Kingdom" --time-window=past_7_days --limit=50

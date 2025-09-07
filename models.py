@@ -144,11 +144,11 @@ class TrendItem(BaseModel):
 
 class FetchParams(BaseModel):
     """Parameters for fetching trending searches."""
-    geo: str = Field("United States", description="Geographic location")
-    time_window: TimeWindow = Field(TimeWindow.PAST_24_HOURS, description="Time window")
-    category: Category = Field(Category.ALL, description="Category filter")
+    geo: str = Field("Vietnam", description="Geographic location")
+    time_window: TimeWindow = Field(TimeWindow.PAST_48_HOURS, description="Time window")
+    category: Category = Field(Category.GAMES, description="Category filter")
     active_only: bool = Field(False, description="Show only active trends")
-    sort: SortBy = Field(SortBy.RELEVANCE, description="Sort order")
+    sort: SortBy = Field(SortBy.SEARCH_VOLUME, description="Sort order")
     
     # Scraping control
     limit: Optional[int] = Field(None, description="Maximum number of trends to fetch")
