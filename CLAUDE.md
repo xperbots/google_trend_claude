@@ -27,11 +27,17 @@ This project is designed to analyze and visualize Google Trends data. The assist
 - Maintain test coverage above 80%
 
 ### Commands
-- Create virtual environment: `python -m venv venv`
+- Create virtual environment: `python3 -m venv venv`
 - Activate virtual environment: `source venv/bin/activate` (Unix/macOS) or `venv\Scripts\activate` (Windows)
-- Install dependencies: `pip install -r requirements.txt`
+- Install dependencies: `pip3 install -r requirements.txt`
 - Run tests: `pytest`
 - Lint code: `flake8`
+- Run main scraper: `python3 trends_trending_now.py --geo="Country Name"`
+- Run simple Chinese output: `python3 simple_trends.py "Country Name"`
+
+### Important Notes
+- Always use `python3` and `pip3` commands explicitly to ensure Python 3 is used
+- The system may have both Python 2 and Python 3 installed, so explicit version is required
 
 ## Project Structure
 ```

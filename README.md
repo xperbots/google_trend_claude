@@ -14,6 +14,7 @@ A robust Python scraper for extracting trending topics from Google Trends "Trend
 - **📸 Error Screenshots**: Automatic screenshot capture on failures
 - **🎛️ CLI Interface**: Rich command-line interface with comprehensive options
 - **📦 Programmatic API**: Can be used as a Python module for integration
+- **🌐 Translation Support** (v2.0+): Automatic translation to any language with dual providers
 
 ## 🚀 Quick Start
 
@@ -101,11 +102,58 @@ Available category filters:
 - `technology` - Technology
 - `travel_and_transportation` - Travel & Transportation
 
+## 🌐 Translation Feature (v2.0+)
+
+The scraper can automatically translate trending topics from any language to your target language.
+
+### Translation Providers
+
+1. **Free Translation** (Default)
+   - Uses Google Translate via deep-translator
+   - No API key required
+   - Supports automatic language detection
+
+2. **GPT-5-nano Translation**
+   - Advanced AI-powered translation
+   - Requires API key
+   - Better context understanding
+
+### Translation Examples
+
+```bash
+# Translate Japanese trends to Chinese
+python trends_trending_now.py --geo="Japan" --translate-to=zh
+
+# Translate Korean trends to English
+python trends_trending_now.py --geo="South Korea" --translate-to=en
+
+# Use GPT-5-nano for translation (API key loaded from .env file)
+python trends_trending_now.py --geo="France" --translate-to=zh --translation-provider=gpt-nano
+
+# Or pass API key directly (overrides .env file)
+python trends_trending_now.py --geo="Germany" --translate-to=zh --translation-provider=gpt-nano --gpt-api-key=YOUR_KEY
+```
+
+### Supported Languages
+
+Common language codes:
+- `zh` - Chinese
+- `en` - English
+- `es` - Spanish
+- `fr` - French
+- `de` - German
+- `ja` - Japanese
+- `ko` - Korean
+- `pt` - Portuguese
+- `ru` - Russian
+- `ar` - Arabic
+- `hi` - Hindi
+
 ## 🐍 Programmatic Usage
 
 ```python
 import asyncio
-from models import FetchParams, TimeWindow, Category, SortBy, ExportMode, OutputFormat
+from models import FetchParams, TimeWindow, Category, SortBy, ExportMode, OutputFormat, TranslationProvider
 from trends_trending_now import run
 
 # Create parameters
@@ -116,7 +164,10 @@ params = FetchParams(
     active_only=True,
     sort=SortBy.SEARCH_VOLUME,
     limit=20,
-    headless=True
+    headless=True,
+    # Translation parameters (v2.0+)
+    translation_target="zh",  # Translate to Chinese
+    translation_provider=TranslationProvider.FREE
 )
 
 # Run scraper
@@ -178,8 +229,10 @@ google_trend_claude/
 | File | Purpose | Key Features |
 |------|---------|--------------|
 | `trends_trending_now.py` | Main CLI application | Full CLI interface, parameter validation |
+| `simple_trends.py` | Quick Chinese viewer | Minimal CLI for fast Chinese output (v2.1) |
 | `models.py` | Data models | Pydantic schemas, enums, type safety |
-| `scraper.py` | Browser automation | Playwright integration, DOM parsing |
+| `scraper.py` | Browser automation | Playwright integration, DOM parsing, geo fixes |
+| `translator.py` | Translation engine | Dual providers, batch optimization, context (v2.0) |
 | `exporter.py` | Data export | Multi-format export, CSV mapping |
 | `utils.py` | Utility functions | Retry logic, screenshots, parsing |
 | `test_basic.py` | Testing | Functionality verification |

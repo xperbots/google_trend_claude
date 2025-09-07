@@ -289,7 +289,17 @@ class GoogleTrendsScraper:
             
     async def _navigate_to_trending_page(self):
         """Navigate to Google Trends trending page."""
-        url = "https://trends.google.com/trending"
+        # Build URL with geo parameter to directly load the correct region
+        base_url = "https://trends.google.com/trending"
+        
+        # Get geo code for URL parameter
+        geo_code = get_geo_code(self.params.geo)
+        geo_param = self._get_geo_url_param(geo_code)
+        
+        if geo_param:
+            url = f"{base_url}?geo={geo_param}"
+        else:
+            url = base_url
         
         await retry_with_backoff(
             self.page.goto,
@@ -302,6 +312,41 @@ class GoogleTrendsScraper:
         logger.info(f"Navigated to: {url}")
         await random_delay()
         
+    def _get_geo_url_param(self, geo_name: str) -> str:
+        """Convert geo name to URL parameter format."""
+        # Common geo codes for Google Trends URLs
+        geo_url_map = {
+            "United States": "US",
+            "Vietnam": "VN",
+            "Japan": "JP",
+            "South Korea": "KR", 
+            "China": "CN",
+            "Taiwan": "TW",
+            "Thailand": "TH",
+            "Singapore": "SG",
+            "Malaysia": "MY",
+            "Philippines": "PH",
+            "Indonesia": "ID",
+            "India": "IN",
+            "United Kingdom": "GB",
+            "Germany": "DE",
+            "France": "FR",
+            "Canada": "CA",
+            "Australia": "AU",
+            "Brazil": "BR",
+            "Mexico": "MX",
+            "Spain": "ES",
+            "Italy": "IT",
+            "Netherlands": "NL",
+            "Sweden": "SE",
+            "Norway": "NO",
+            "Denmark": "DK",
+            "Finland": "FI",
+            "Russia": "RU"
+        }
+        
+        return geo_url_map.get(geo_name, "")
+        
     async def _apply_filters(self):
         """Apply all specified filters to the page."""
         try:
@@ -313,8 +358,13 @@ class GoogleTrendsScraper:
             await random_delay(2000, 3000)  # Give page time to fully load
             
             # Check if we need to change filters from defaults
+            # Skip location setting if we've already loaded the URL with geo parameter
+            geo_code = get_geo_code(self.params.geo)
+            geo_param = self._get_geo_url_param(geo_code)
+            needs_location_change = self.params.geo != "United States" and not geo_param
+            
             needs_filter_changes = (
-                self.params.geo != "United States" or
+                needs_location_change or
                 self.params.time_window.value != "past_24_hours" or
                 self.params.category.value != "all" or
                 self.params.active_only or
@@ -324,8 +374,8 @@ class GoogleTrendsScraper:
             if needs_filter_changes:
                 logger.info("Applying custom filters...")
                 
-                # Apply location filter
-                if self.params.geo != "United States":
+                # Apply location filter (only if not already set via URL)
+                if needs_location_change:
                     await self._set_location()
                 
                 # Apply time window filter  
@@ -359,22 +409,96 @@ class GoogleTrendsScraper:
     async def _set_location(self):
         """Set geographic location filter."""
         try:
-            # Click on location selector
-            location_button = self.page.get_by_text("Select location")
-            await location_button.click()
+            # Try different ways to find and click the location selector
+            location_clicked = False
+            
+            # Try "Select location" text first
+            try:
+                location_button = self.page.get_by_text("Select location").first
+                if await location_button.is_visible():
+                    await location_button.click()
+                    location_clicked = True
+            except:
+                pass
+            
+            # If not found, try looking for location icon or button
+            if not location_clicked:
+                selectors = [
+                    '[aria-label*="location"]',
+                    '[aria-label*="Location"]',
+                    'button:has-text("United States")',  # Default location
+                    'button:has-text("location")',
+                    '.location-button',
+                    '[data-testid*="location"]'
+                ]
+                
+                for selector in selectors:
+                    try:
+                        button = await self.page.query_selector(selector)
+                        if button and await button.is_visible():
+                            await button.click()
+                            location_clicked = True
+                            break
+                    except:
+                        continue
+            
+            if not location_clicked:
+                logger.warning("Could not find location selector button")
+                return
+                
             await random_delay()
+            
+            # Get the standardized geo code
+            geo_code = get_geo_code(self.params.geo)
             
             # Search for location
             search_box = self.page.locator('input[type="text"]').first
-            await search_box.fill(get_geo_code(self.params.geo))
+            await search_box.fill(geo_code)
+            await random_delay(1000, 2000)  # Give more time for search results
+            
+            # Try multiple ways to find and click the location option
+            location_found = False
+            
+            # Try clicking on the geo_code version first
+            try:
+                location_option = self.page.get_by_text(geo_code).first
+                if await location_option.is_visible():
+                    await location_option.click()
+                    location_found = True
+            except:
+                pass
+            
+            # If that didn't work, try the original geo parameter
+            if not location_found:
+                try:
+                    location_option = self.page.get_by_text(self.params.geo).first
+                    if await location_option.is_visible():
+                        await location_option.click()
+                        location_found = True
+                except:
+                    pass
+            
+            # If still not found, try a more flexible approach
+            if not location_found:
+                # Look for any option containing the location name
+                location_name = self.params.geo.lower()
+                elements = await self.page.query_selector_all('text')
+                for element in elements[:10]:  # Check first 10 text elements
+                    try:
+                        text = await element.inner_text()
+                        if text and location_name in text.lower():
+                            await element.click()
+                            location_found = True
+                            break
+                    except:
+                        continue
+            
             await random_delay()
             
-            # Click on matching result
-            location_option = self.page.get_by_text(self.params.geo).first
-            await location_option.click()
-            await random_delay()
-            
-            logger.info(f"Set location to: {self.params.geo}")
+            if location_found:
+                logger.info(f"Set location to: {geo_code}")
+            else:
+                logger.warning(f"Could not find location option for: {self.params.geo}")
             
         except Exception as e:
             logger.warning(f"Could not set location to {self.params.geo}: {e}")
@@ -536,6 +660,10 @@ class GoogleTrendsScraper:
             # Extract title (usually first meaningful line)
             title = lines[0] if lines else "Unknown"
             
+            # Extract category information from the page content
+            category = self._extract_trend_category(row_text, lines)
+            self._last_extracted_category = category  # Store for breakdown extraction
+            
             # Find search volume (looks like "2M+", "100K+", etc.)
             volume_text = "N/A"
             for line in lines:
@@ -616,33 +744,252 @@ class GoogleTrendsScraper:
                 retrieved_at=datetime.now()
             )
             
+            # Add the extracted category as a separate field for translation context
+            trend.trend_category = category
+            
             return trend
             
         except Exception as e:
             logger.warning(f"Error extracting single trend: {e}")
             return None
+    
+    def _extract_trend_category(self, row_text: str, lines: List[str]) -> str:
+        """Extract category information from trend row content."""
+        # Common category indicators in Google Trends
+        category_keywords = {
+            'Sports': ['vs', 'game', 'match', 'score', 'team', 'player', 'football', 'basketball', 'soccer', 'baseball', 'nfl', 'nba', 'mlb', 'nhl', 'playoff', 'championship'],
+            'Entertainment': ['movie', 'film', 'actor', 'actress', 'celebrity', 'singer', 'music', 'album', 'concert', 'tv show', 'series', 'netflix', 'disney', 'marvel', 'awards'],
+            'Technology': ['iphone', 'android', 'app', 'software', 'update', 'apple', 'google', 'microsoft', 'tesla', 'ai', 'crypto', 'bitcoin', 'tech', 'launch', 'release'],
+            'News': ['breaking', 'news', 'report', 'announced', 'died', 'death', 'accident', 'fire', 'storm', 'weather', 'election', 'politics', 'government', 'court'],
+            'Health': ['health', 'medical', 'doctor', 'hospital', 'disease', 'vaccine', 'covid', 'medicine', 'treatment', 'symptoms'],
+            'Business': ['stock', 'market', 'company', 'ceo', 'earnings', 'profit', 'loss', 'merger', 'acquisition', 'ipo', 'investment'],
+            'Science': ['research', 'study', 'scientist', 'discovery', 'space', 'nasa', 'climate', 'environment', 'energy']
+        }
+        
+        # Convert to lowercase for matching
+        text_lower = row_text.lower()
+        title_lower = lines[0].lower() if lines else ""
+        
+        # Check for category keywords
+        category_scores = {}
+        for category, keywords in category_keywords.items():
+            score = 0
+            for keyword in keywords:
+                if keyword in text_lower:
+                    score += 2  # Full match in any text
+                if keyword in title_lower:
+                    score += 3  # Title match is more important
+                    
+                # Check for partial matches in title
+                for word in title_lower.split():
+                    if keyword in word or word in keyword:
+                        score += 1
+                        
+            if score > 0:
+                category_scores[category] = score
+        
+        # Return category with highest score
+        if category_scores:
+            return max(category_scores.items(), key=lambda x: x[1])[0]
+        
+        return "General"
             
     async def _expand_trend_breakdown(self, item_element, trend: TrendItem):
-        """Expand trend breakdown to get more related queries."""
+        """Extract comprehensive trend breakdown information."""
         try:
-            # Look for expand button/link
-            expand_element = await item_element.query_selector('span:has-text("more")')
-            if expand_element:
-                await expand_element.click()
-                await random_delay()
+            # Look for various breakdown indicators
+            breakdown_info = await self._extract_breakdown_info(item_element)
+            
+            if breakdown_info:
+                trend.breakdown_description = breakdown_info.get('description')
+                trend.query_variants = breakdown_info.get('variants', [])
+                trend.trend_context = breakdown_info.get('context')
                 
-                # Extract additional related queries from expanded view
-                # This would need to be implemented based on actual page structure
-                # when the breakdown is expanded
-                
-                # Close the expanded view
-                close_button = await self.page.query_selector('[aria-label="Close"]')
-                if close_button:
-                    await close_button.click()
-                    await random_delay()
+                logger.debug(f"Extracted breakdown for '{trend.title}': {breakdown_info.get('description', 'No description')}")
+            
+            # Try to expand for more detailed information
+            await self._try_expand_modal(item_element, trend)
                     
         except Exception as e:
-            logger.warning(f"Error expanding trend breakdown: {e}")
+            logger.warning(f"Error expanding trend breakdown for '{trend.title}': {e}")
+    
+    async def _extract_breakdown_info(self, item_element) -> dict:
+        """Extract breakdown information from the trend element."""
+        breakdown_info = {}
+        
+        try:
+            # Get all text content from the element
+            full_text = await item_element.inner_text()
+            
+            # Look for breakdown patterns
+            lines = [line.strip() for line in full_text.split('\n') if line.strip()]
+            
+            # Extract description from context clues
+            description_parts = []
+            query_variants = []
+            
+            # Analyze the content for breakdown information
+            for i, line in enumerate(lines):
+                # Skip basic metadata lines
+                if any(skip in line.lower() for skip in ['trending_up', 'arrow_upward', 'ago', '+', 'active', 'lasted']):
+                    continue
+                
+                # Look for query variants (usually multiple similar searches)
+                if i > 0 and len(line) > 3 and line not in lines[:i]:  # Avoid duplicates
+                    # If it looks like a search query variant
+                    if (any(word in line.lower() for word in ['vs', 'game', 'match', 'news', 'update']) or 
+                        len(line.split()) >= 2):
+                        query_variants.append(line)
+            
+            # Generate contextual description based on category and content
+            category = getattr(self, '_last_extracted_category', 'General')  
+            context = self._generate_trend_context(lines[0] if lines else "", category, query_variants)
+            
+            breakdown_info = {
+                'description': f"Trending topic in {category} category",
+                'variants': query_variants[:5],  # Limit to top 5 variants
+                'context': context
+            }
+            
+        except Exception as e:
+            logger.debug(f"Error extracting breakdown info: {e}")
+        
+        return breakdown_info
+    
+    def _generate_trend_context(self, title: str, category: str, variants: List[str]) -> str:
+        """Generate rich context description for the trend."""
+        context_templates = {
+            'Sports': {
+                'vs': "This appears to be a sports matchup between teams or competitors",
+                'game': "This is related to a sports game or match",
+                'player': "This involves a sports player or athlete",
+                'team': "This is about a sports team",
+                'default': "This is a trending sports topic"
+            },
+            'Entertainment': {
+                'movie': "This is related to a movie or film",
+                'music': "This involves music, songs, or artists", 
+                'celebrity': "This is about a celebrity or public figure",
+                'show': "This is related to a TV show or series",
+                'default': "This is a trending entertainment topic"
+            },
+            'Technology': {
+                'iphone': "This is about Apple's iPhone smartphone",
+                'app': "This involves a mobile or software application",
+                'update': "This is about a software or product update",
+                'release': "This involves a product launch or release",
+                'default': "This is a trending technology topic"
+            },
+            'News': {
+                'breaking': "This is breaking news or current events",
+                'announced': "This involves a recent announcement",
+                'election': "This is related to political elections",
+                'weather': "This involves weather or climate events",
+                'default': "This is a trending news topic"
+            }
+        }
+        
+        title_lower = title.lower()
+        category_templates = context_templates.get(category, {'default': f"This is a trending {category.lower()} topic"})
+        
+        # Find the most specific context
+        for keyword, template in category_templates.items():
+            if keyword != 'default' and keyword in title_lower:
+                context = template
+                break
+        else:
+            context = category_templates['default']
+        
+        # Add variant information if available
+        if variants:
+            context += f". Related searches include: {', '.join(variants[:3])}"
+            if len(variants) > 3:
+                context += f" and {len(variants) - 3} more"
+        
+        return context
+    
+    async def _try_expand_modal(self, item_element, trend: TrendItem):
+        """Try to click and expand trend for more detailed information."""
+        try:
+            # Look for clickable elements that might open breakdown
+            clickable_selectors = [
+                'span:has-text("more")',
+                'button',
+                '[role="button"]',
+                'a',
+                '.clickable'
+            ]
+            
+            for selector in clickable_selectors:
+                expand_element = await item_element.query_selector(selector)
+                if expand_element and await expand_element.is_visible():
+                    # Try clicking to open breakdown modal
+                    await expand_element.click()
+                    await random_delay(1000, 2000)
+                    
+                    # Look for modal or popup with more information
+                    modal_info = await self._extract_modal_breakdown()
+                    if modal_info:
+                        # Update trend with modal information
+                        trend.breakdown_description = modal_info.get('description', trend.breakdown_description)
+                        if modal_info.get('variants'):
+                            trend.query_variants = modal_info['variants']
+                    
+                    # Close the modal
+                    await self._close_modal()
+                    break
+                    
+        except Exception as e:
+            logger.debug(f"Could not expand modal for trend: {e}")
+    
+    async def _extract_modal_breakdown(self) -> dict:
+        """Extract information from opened trend breakdown modal."""
+        try:
+            # Look for modal content
+            modal_selectors = [
+                '[role="dialog"]',
+                '.modal',
+                '.popup',
+                '.breakdown'
+            ]
+            
+            for selector in modal_selectors:
+                modal = await self.page.query_selector(selector)
+                if modal and await modal.is_visible():
+                    modal_text = await modal.inner_text()
+                    
+                    # Extract breakdown information from modal
+                    if "trend breakdown" in modal_text.lower():
+                        lines = [line.strip() for line in modal_text.split('\n') if line.strip()]
+                        
+                        return {
+                            'description': lines[1] if len(lines) > 1 else "Detailed trend breakdown",
+                            'variants': [line for line in lines[2:] if len(line) > 3][:10]
+                        }
+            
+        except Exception as e:
+            logger.debug(f"Error extracting modal breakdown: {e}")
+        
+        return {}
+    
+    async def _close_modal(self):
+        """Close any open modal or popup."""
+        try:
+            close_selectors = [
+                '[aria-label="Close"]',
+                '.close',
+                'button:has-text("Close")',
+                '[role="button"]:has-text("×")'
+            ]
+            
+            for selector in close_selectors:
+                close_button = await self.page.query_selector(selector)
+                if close_button and await close_button.is_visible():
+                    await close_button.click()
+                    await random_delay()
+                    break
+        except:
+            pass  # Ignore close errors
             
     async def _go_to_next_page(self) -> bool:
         """Go to next page if available."""
@@ -677,4 +1024,79 @@ async def run_scraper(params: FetchParams) -> List[TrendItem]:
         List of scraped trends
     """
     async with GoogleTrendsScraper(params) as scraper:
-        return await scraper.scrape_trends()
+        trends = await scraper.scrape_trends()
+        
+        # Apply translation if requested
+        if params.translation_target and trends:
+            logger.info(f"Translating {len(trends)} trends to {params.translation_target}")
+            
+            try:
+                from translator import create_translator, translate_trend_items
+                
+                # Create translator instance
+                translator = create_translator(
+                    params.translation_provider,
+                    params.translation_target,
+                    params.gpt_api_key
+                )
+                
+                # Detect source language from geo parameter
+                source_lang = _get_source_language(params.geo)
+                
+                # Translate trends with geographic context
+                await translate_trend_items(trends, translator, source_lang, params.geo)
+                
+                logger.info("Translation completed successfully")
+                
+            except Exception as e:
+                logger.error(f"Translation failed: {e}")
+                # Continue with untranslated data
+        
+        return trends
+
+
+def _get_source_language(geo: str) -> str:
+    """
+    Guess source language from geographic location.
+    
+    Args:
+        geo: Geographic location string
+        
+    Returns:
+        Language code or 'auto' for automatic detection
+    """
+    # Common country to language mappings
+    geo_to_lang = {
+        "japan": "ja",
+        "korea": "ko",
+        "south korea": "ko",
+        "china": "zh",
+        "taiwan": "zh",
+        "france": "fr",
+        "germany": "de",
+        "spain": "es",
+        "mexico": "es",
+        "brazil": "pt",
+        "portugal": "pt",
+        "russia": "ru",
+        "italy": "it",
+        "netherlands": "nl",
+        "poland": "pl",
+        "turkey": "tr",
+        "india": "hi",
+        "thailand": "th",
+        "vietnam": "vi",
+        "indonesia": "id",
+        "malaysia": "ms",
+        "saudi arabia": "ar",
+        "israel": "he"
+    }
+    
+    # Try to match country name
+    geo_lower = geo.lower()
+    for country, lang in geo_to_lang.items():
+        if country in geo_lower:
+            return lang
+    
+    # Default to auto-detection
+    return "auto"

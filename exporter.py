@@ -132,6 +132,14 @@ class DataExporter:
                 'retrieved_at': trend.retrieved_at.isoformat(),
                 'source': trend.source
             }
+            
+            # Add translation fields if available
+            if trend.title_translated:
+                row['title_translated'] = trend.title_translated
+            
+            if trend.related_translated:
+                row['related_translated'] = ';'.join(trend.related_translated)
+                
             data.append(row)
         
         return pd.DataFrame(data)
@@ -264,7 +272,10 @@ def print_export_summary(
     if trends:
         print(f"\nSample trends:")
         for i, trend in enumerate(trends[:3]):
-            print(f"  {i+1}. {trend.title} ({trend.search_volume_text}, {trend.status})")
+            if hasattr(trend, 'title_translated') and trend.title_translated:
+                print(f"  {i+1}. {trend.title} → {trend.title_translated} ({trend.search_volume_text}, {trend.status})")
+            else:
+                print(f"  {i+1}. {trend.title} ({trend.search_volume_text}, {trend.status})")
 
 
 def _format_file_size(filepath: str) -> str:

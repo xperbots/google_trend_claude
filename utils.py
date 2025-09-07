@@ -295,6 +295,22 @@ def get_geo_code(location: str) -> str:
         "no": "Norway",
         "dk": "Denmark",
         "fi": "Finland",
+        "vn": "Vietnam",
+        "vietnam": "Vietnam",
+        "china": "China",
+        "cn": "China",
+        "taiwan": "Taiwan",
+        "tw": "Taiwan",
+        "th": "Thailand",
+        "thailand": "Thailand",
+        "sg": "Singapore",
+        "singapore": "Singapore",
+        "my": "Malaysia",
+        "malaysia": "Malaysia",
+        "ph": "Philippines",
+        "philippines": "Philippines",
+        "id": "Indonesia",
+        "indonesia": "Indonesia",
     }
     
     # Check if it's a known code

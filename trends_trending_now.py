@@ -7,6 +7,7 @@ using headless browser automation with configurable filters and export options.
 """
 
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -14,14 +15,18 @@ from typing import List, Optional
 
 import typer
 from typing_extensions import Annotated
+from dotenv import load_dotenv
 
 from models import (
     FetchParams, TrendItem, TimeWindow, Category, SortBy, 
-    ExportMode, OutputFormat, ErrorReport
+    ExportMode, OutputFormat, ErrorReport, TranslationProvider
 )
 from scraper import run_scraper
 from exporter import DataExporter, print_export_summary
 from utils import setup_logging, ensure_directories
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 app = typer.Typer(
@@ -117,6 +122,26 @@ def main(
         None,
         "--log-file",
         help="Log file path (default: logs only to stdout)"
+    ),
+    translate_to: Optional[str] = typer.Option(
+        None,
+        "--translate-to",
+        help="Target language code for translation (e.g., 'zh' for Chinese, 'es' for Spanish)"
+    ),
+    translation_provider: str = typer.Option(
+        "free",
+        "--translation-provider",
+        help="Translation provider: free (Google Translate) or gpt-nano (GPT-5-nano)"
+    ),
+    gpt_api_key: Optional[str] = typer.Option(
+        None,
+        "--gpt-api-key",
+        help="API key for GPT-5-nano (can also be set via GPT_NANO_API_KEY env var)"
+    ),
+    simple_list: bool = typer.Option(
+        False,
+        "--simple-list",
+        help="Output only a simple numbered list of Chinese topic names (no files, no JSON)"
     )
 ):
     """
@@ -135,6 +160,15 @@ def main(
       
       # Debug mode with headed browser and parquet output
       python trends_trending_now.py --no-headless --format=parquet --log-level=DEBUG
+      
+      # Translate Japanese trends to Chinese using free translator
+      python trends_trending_now.py --geo="Japan" --translate-to=zh
+      
+      # Translate trends using GPT-5-nano
+      python trends_trending_now.py --geo="Korea" --translate-to=zh --translation-provider=gpt-nano
+      
+      # Simple Chinese list output (fast and clean)
+      python trends_trending_now.py --geo="Japan" --simple-list
     """
     
     # Setup logging
@@ -150,9 +184,26 @@ def main(
         sort_enum = SortBy(sort)
         export_mode_enum = ExportMode(export_mode)
         format_enum = OutputFormat(format)
+        
+        # Convert translation provider string to enum
+        if translation_provider == "free":
+            translation_provider_enum = TranslationProvider.FREE
+        elif translation_provider == "gpt-nano":
+            translation_provider_enum = TranslationProvider.GPT_NANO
+        else:
+            print(f"❌ Invalid translation provider: {translation_provider}")
+            return 1
+            
     except ValueError as e:
         print(f"❌ Invalid parameter value: {e}")
         return 1
+    
+    # Handle simple list mode
+    if simple_list:
+        # For simple list, force translation to Chinese and use GPT for better quality
+        if not translate_to:
+            translate_to = "zh"  # Default to Chinese
+            translation_provider_enum = TranslationProvider.GPT_NANO if os.getenv("OPENAI_API_KEY") else TranslationProvider.FREE
     
     # Create fetch parameters
     params = FetchParams(
@@ -170,7 +221,10 @@ def main(
         lang=lang,
         proxy=proxy,
         out=out,
-        format=format_enum
+        format=format_enum,
+        translation_target=translate_to,
+        translation_provider=translation_provider_enum,
+        gpt_api_key=gpt_api_key
     )
     
     # Run the scraper
@@ -187,26 +241,39 @@ def main(
         
         duration = time.time() - start_time
         
-        # Export results
+        # Handle output based on mode
         if trends:
-            output_path = params.get_output_path()
-            exporter = DataExporter()
-            
-            success = exporter.export_data(trends, output_path, params.format)
-            
-            if success:
-                # Print summary
-                print_export_summary(
-                    trends, 
-                    output_path, 
-                    params.model_dump(), 
-                    duration
-                )
-                print(f"\n✅ Successfully exported {len(trends)} trends to {output_path}")
+            if simple_list:
+                # Simple list mode - show original and Chinese translation
+                print(f"\n📋 热门话题列表 ({geo}):")
+                print("=" * 60)
+                for i, trend in enumerate(trends, 1):
+                    if hasattr(trend, 'title_translated') and trend.title_translated:
+                        print(f"{i:2d}. {trend.title} → {trend.title_translated}")
+                    else:
+                        print(f"{i:2d}. {trend.title}")
+                print(f"\n✅ 找到 {len(trends)} 个热门话题")
                 return 0
             else:
-                print(f"\n❌ Failed to export data")
-                return 1
+                # Normal mode - export to file
+                output_path = params.get_output_path()
+                exporter = DataExporter()
+                
+                success = exporter.export_data(trends, output_path, params.format)
+                
+                if success:
+                    # Print summary
+                    print_export_summary(
+                        trends, 
+                        output_path, 
+                        params.model_dump(), 
+                        duration
+                    )
+                    print(f"\n✅ Successfully exported {len(trends)} trends to {output_path}")
+                    return 0
+                else:
+                    print(f"\n❌ Failed to export data")
+                    return 1
         else:
             print(f"\n⚠️  No trends found with the specified filters")
             return 1

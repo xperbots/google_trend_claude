@@ -95,6 +95,12 @@ class TrendStatus(str, Enum):
     LASTED = "Lasted"
 
 
+class TranslationProvider(str, Enum):
+    """Translation provider options."""
+    FREE = "free"
+    GPT_NANO = "gpt-nano"
+
+
 class TrendItem(BaseModel):
     """Model for a single trending search item."""
     title: str = Field(description="The trending search title/keyword")
@@ -118,6 +124,16 @@ class TrendItem(BaseModel):
     
     # Optional source field for export mode
     source: Optional[str] = Field("scrape", description="Data source (scrape, export_csv, export_rss)")
+    
+    # Translation fields
+    title_translated: Optional[str] = Field(None, description="Translated title")
+    related_translated: Optional[List[str]] = Field(None, description="Translated related queries")
+    
+    # Trend breakdown fields (rich context for better translation)
+    trend_category: Optional[str] = Field(None, description="Actual category extracted from Google Trends page")
+    breakdown_description: Optional[str] = Field(None, description="Google's explanation of what this trend represents")
+    query_variants: Optional[List[str]] = Field(None, description="Related search query variants from breakdown")
+    trend_context: Optional[str] = Field(None, description="Rich context about the trend's meaning and background")
     
     class Config:
         use_enum_values = True
@@ -147,6 +163,11 @@ class FetchParams(BaseModel):
     # Output
     out: Optional[str] = Field(None, description="Output file path")
     format: OutputFormat = Field(OutputFormat.JSON, description="Output file format")
+    
+    # Translation
+    translation_target: Optional[str] = Field(None, description="Target language for translation (e.g., 'zh' for Chinese)")
+    translation_provider: TranslationProvider = Field(TranslationProvider.FREE, description="Translation provider")
+    gpt_api_key: Optional[str] = Field(None, description="API key for GPT-5-nano (if using GPT provider)")
     
     def get_output_path(self) -> str:
         """Generate output file path if not specified."""
